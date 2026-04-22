@@ -4,6 +4,7 @@ CREATE TABLE "users" (
 	"email" varchar(322) NOT NULL,
 	"password" varchar(70),
 	"salt" text,
+	"refresh_token" text,
 	"created_at" timestamp DEFAULT now() NOT NULL,
 	"updated_at" timestamp DEFAULT now()
 );

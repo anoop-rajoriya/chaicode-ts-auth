@@ -5,3 +5,8 @@ export const SignupSchema = zod.object({
     email: zod.email(),
     password: zod.string().min(4).max(20)
 })
+
+export const SigninSchema = zod.object({
+    email: zod.email(),
+    password: zod.string().min(4).max(20)
+})

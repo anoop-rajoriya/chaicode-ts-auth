@@ -1,10 +1,11 @@
 import type {Request, Response} from "express"
 import {eq} from "drizzle-orm"
 
-import {SignupSchema} from "./validation.js"
+import {SignupSchema, SigninSchema} from "./validation.js"
 import {db} from "../../db/index.js"
 import {userTable} from "../../db/schema.js"
 import {generateHash, generateSalt} from "../../utils/crypto.utils.js"
+import {generateAccessToken, generateRefreshToken} from "../../utils/tokens.utils.js"
 
 export const signup = async (req:Request, res:Response)=>{
     // validate request
@@ -44,12 +45,48 @@ export const signup = async (req:Request, res:Response)=>{
     return res.status(201).json(result[0]);
 }
 
-export const signin = (req:Request, res:Response)=>{
+export const signin = async (req:Request, res:Response)=>{
     // validate request
+    const parsed = SigninSchema.safeParse(req.body)
+    if(!parsed.success){
+        return res.status(400).json({error: parsed.error.issues})
+    }
+    const {email, password} = parsed.data
+
     // find user (Error: User not registered)
+    const [user] = await db
+    .select()
+    .from(userTable)
+    .where(eq(userTable.email, email))
+    .limit(1)
+
+    if(!user){
+        return res.status(400).json({error: "Email or password incorrect"})
+    }
+
     // compare password (Error: Email or password incorrect)
-    // generate tokens
+    const hash = generateHash(password, user.salt!)
+
+    if(user.password !== hash){
+        return res.status(400).json({error: "Email or password incorrect"})
+    }
+
+    // generate tokens and refreshtoken in user entry
+    const accessToken = generateAccessToken({
+        id: user.id, 
+        name: user.name!, 
+        email: user.email
+    })
+    const refreshToken = generateRefreshToken({id: user.id})
+
+    await db.update(userTable)
+    .set({refreshToken: refreshToken})
+    .where(eq(userTable.id, user.id))
+
     // return {id, refreshToken, accessToken}
+    res.set("Authorization", `Bearer ${accessToken}`)
+    res.status(200).json({id: user.id, refreshToken})
+
 }
 
 export const signout = (req:Request, res:Response)=>{

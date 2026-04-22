@@ -1,5 +1,5 @@
 {
-  "id": "5257bcf7-7988-4b71-9728-cf507dea9a65",
+  "id": "1e36f260-e51a-4b58-a567-8ca58032dd27",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -35,6 +35,12 @@
         },
         "salt": {
           "name": "salt",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "refresh_token": {
+          "name": "refresh_token",
           "type": "text",
           "primaryKey": false,
           "notNull": false

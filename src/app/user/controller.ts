@@ -5,7 +5,7 @@ import {SignupSchema, SigninSchema} from "./validation.js"
 import {db} from "../../db/index.js"
 import {userTable} from "../../db/schema.js"
 import {generateHash, generateSalt} from "../../utils/crypto.utils.js"
-import {generateAccessToken, generateRefreshToken} from "../../utils/tokens.utils.js"
+import {generateAccessToken, generateRefreshToken, verifyAccessToken, verifyRefreshToken, type AccessPayload, type RefreshPayload} from "../../utils/tokens.utils.js"
 
 export const signup = async (req:Request, res:Response)=>{
     // validate request
@@ -89,13 +89,88 @@ export const signin = async (req:Request, res:Response)=>{
 
 }
 
-export const signout = (req:Request, res:Response)=>{
-    // find user (Error: Unauthorized access)
-    // remove token
-    // return {id, isSignout}
+interface RefreshParams {
+    token: string
 }
 
-export const me = (req:Request, res:Response)=>{
+export const refresh = async (req:Request<RefreshParams>, res:Response)=>{
+    // extract token from params
+    const {token} = req.params || ""
+
+    // verify token (Error: Invalid refresh token)
+    const decoded = verifyRefreshToken(token) as RefreshPayload
+    if(!decoded){
+        res.status(400).json({error: "Invalid refresh token"})
+    }
+
+    // find user and match token (Error: Invalid refresh token)
+    const [user] = await db.select()
+    .from(userTable)
+    .where(eq(userTable.id, decoded.id))
+
+    if(!user || user.refreshToken !== token){
+        return res.status(400).json({error: "Invalid refresh token"})
+    }
+
+    // generate new tokens
+    const accessToken = generateAccessToken({
+        id: user.id, 
+        name: user.name!, 
+        email: user.email
+    })
+    const refreshToken = generateRefreshToken({id: user.id})
+
+    await db.update(userTable)
+    .set({refreshToken})
+    .where(eq(userTable.id, user.id))
+
+    // return generated tokens
+    res.set("Authorization", `Bearer ${accessToken}`)
+    return res.status(200).json({id: user.id, refreshToken})
+}
+
+export const signout = async (req:Request, res:Response)=>{
+    // extract token from Bearer header
+    const bearer = req.get("Authorization") || ""
+    if(bearer.length === 0 || !bearer.startsWith("Bearer ")){
+        res.status(401).json({error: "Unauthorized access"})
+    }
+
+    const decoded = verifyAccessToken(bearer.split(" ")[1]!) as AccessPayload
+
+    // remove token from row entry (Error: Invalid authoriztion headers)
+    const [user] = await db.update(userTable)
+    .set({refreshToken: null})
+    .where(eq(userTable.id, decoded.id))
+    .returning({id: userTable.id})
+
+    if(!user){
+        res.status(401).json({error: "Unauthorized access"})
+    }
+
+    // remove token
+    res.set("Authorization", "")
+    
+    // return {id, isSignout}
+    res.status(200).json({userId: user?.id, isSignout: true})
+}
+
+export const me = async (req:Request, res:Response)=>{
     // find user (Error: Unauthorized access)
+    const [user] = await db.select()
+    .from(userTable)
+    .where(eq(userTable.id, req.user.id))
+
+    if(!user){
+        res.status(404).json({error: "User not found"})
+    }
+
     // return user
+    return res.status(200).json({
+        id: user?.id, 
+        name: user?.name, 
+        email: user?.email, 
+        createdAt: user?.createdAt, 
+        updatedAt: user?.updatedAt
+    })
 }
